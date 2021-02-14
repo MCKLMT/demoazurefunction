@@ -47,7 +47,7 @@ jobs:
           name: arm_template
           path: ./Infrastructure/main.json
 
-  Deploy_to_Dev:
+  Deploy_Infrastructure:
     needs: Build
 
     environment:
@@ -88,7 +88,7 @@ jobs:
           # Specifies the name of the resource group deployment to create.
           deploymentName: main
 
-      - name: "Run Azure Functions Action"
+      - name: "Deploy Azure Function"
         uses: Azure/functions-action@v1
         id: deploy-to-azure
         with:
