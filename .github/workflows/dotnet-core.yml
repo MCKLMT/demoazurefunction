@@ -1,0 +1,104 @@
+name: .NET Core
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  Build:
+    runs-on: ubuntu-20.04
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Setup .NET Core
+        uses: actions/setup-dotnet@v1
+        with:
+          dotnet-version: 5.0.100
+
+      - name: Install dependencies
+        run: dotnet restore AzureFunction
+
+      - name: Build
+        run: dotnet build AzureFunction --configuration Release --no-restore
+
+      - name: Publish
+        run: dotnet publish AzureFunction --configuration Release -o ./output/
+
+      - name: Test
+        run: dotnet test AzureFunction --no-restore --verbosity normal
+
+      - name: Publish webapp artifact
+        uses: actions/upload-artifact@v1
+        with:
+          name: AzureFunction
+          path: ./output/
+
+      - name: Run Bicep build
+        uses: aliencube/bicep-build-actions@v0.1
+        with:
+          files: Infrastructure/main.bicep
+
+      - name: Publish ARM template artifact
+        uses: actions/upload-artifact@v1
+        with:
+          name: arm_template
+          path: ./Infrastructure/main.json
+
+  Deploy_to_Dev:
+    needs: Build
+
+    environment:
+      name: dev
+      url: ${{ steps.deploy-to-azure.outputs.app-url }}
+
+    runs-on: ubuntu-20.04
+
+    steps:
+      - uses: actions/download-artifact@v2
+
+      - name: Display structure of downloaded files
+        run: ls -R
+
+      - name: Login to Azure
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Create resource group
+        run: |
+          az group create -n 'demoazurefunction-rg' -l 'France Central'
+
+      - name: Deploy Azure Resource Manager (ARM) Template
+        uses: azure/arm-deploy@v1
+        id: deploy-infrastructure
+        with:
+          # Provide the scope of the deployment. Valid values are: 'resourcegroup', 'managementgroup', 'subscription'
+          scope: resourcegroup
+          # Provide the Id of the subscription which should be used, only required for resource Group or Subscription deployments.
+          subscriptionId: ${{ secrets.SUBSCRIPTION_ID }}
+          # Provide the name of a resource group, only required for resource Group deployments.
+          resourceGroupName: demoazurefunction-rg
+          # Specify the path or URL to the Azure Resource Manager template.
+          template: ./arm_template/main.json
+          # Incremental (only add resources to resource group) or Complete (remove extra resources from resource group) or Validate (only validates the template).
+          deploymentMode: Incremental
+          # Specifies the name of the resource group deployment to create.
+          deploymentName: webapp
+
+      - name: Deploy to Azure Web App
+        uses: azure/webapps-deploy@v2
+        id: deploy-to-azure
+        with:
+          app-name: demogh-dev
+          #publish-profile: ${{ steps.webapp.outputs.profile }}
+          package: ./AzureFunction/
+
+      - name: "Run Azure Functions Action"
+        uses: Azure/functions-action@v1
+        id: deploy-to-azure
+        with:
+          app-name: ${{ steps.deploy-infrastructure.outputs.azureFunctionNameOutput }}
+          package: "./output"
