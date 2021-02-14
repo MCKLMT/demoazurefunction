@@ -86,11 +86,11 @@ jobs:
           # Incremental (only add resources to resource group) or Complete (remove extra resources from resource group) or Validate (only validates the template).
           deploymentMode: Incremental
           # Specifies the name of the resource group deployment to create.
-          deploymentName: webapp
+          deploymentName: main
 
       - name: "Run Azure Functions Action"
         uses: Azure/functions-action@v1
         id: deploy-to-azure
         with:
           app-name: ${{ steps.deploy-infrastructure.outputs.azureFunctionNameOutput }}
-          package: "./output"
+          package: "./AzureFunction/"
